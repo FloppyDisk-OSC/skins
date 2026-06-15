@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Skin Directory</title>
+<title>Skin Browser</title>
 
 <style>
 body {
+    margin: 0;
+    padding: 20px;
     background: #121212;
     color: white;
     font-family: Arial, sans-serif;
-    margin: 0;
-    padding: 20px;
 }
 
 h1 {
@@ -20,7 +20,7 @@ h1 {
 
 #skins {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
     gap: 12px;
 }
 
@@ -29,9 +29,9 @@ h1 {
     align-items: center;
     gap: 12px;
     background: #1e1e1e;
-    padding: 12px;
-    border-radius: 12px;
     border: 1px solid #333;
+    border-radius: 12px;
+    padding: 12px;
 }
 
 .skin img {
@@ -39,18 +39,30 @@ h1 {
     height: 64px;
     image-rendering: pixelated;
     border-radius: 4px;
-    background: #2a2a2a;
 }
 
 .skin-name {
+    flex: 1;
     color: #6cb6ff;
     cursor: pointer;
     font-weight: bold;
-    font-size: 1.1em;
 }
 
 .skin-name:hover {
     text-decoration: underline;
+}
+
+button {
+    background: #2563eb;
+    border: none;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #3b82f6;
 }
 
 #toast {
@@ -58,84 +70,173 @@ h1 {
     bottom: 20px;
     right: 20px;
     background: #22c55e;
-    color: white;
-    padding: 12px 18px;
+    padding: 10px 16px;
     border-radius: 8px;
     opacity: 0;
-    transition: opacity 0.2s;
-    pointer-events: none;
+    transition: opacity .2s;
 }
 
-.loading {
+#previewModal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.8);
+    display: none;
+    justify-content: center;
+    align-items: center;
+}
+
+#previewBox {
+    background: #1e1e1e;
+    padding: 20px;
+    border-radius: 12px;
     text-align: center;
-    color: #aaa;
+}
+
+#previewTitle {
+    margin-bottom: 10px;
+    font-size: 20px;
+}
+
+#skinCanvas {
+    width: 300px;
+    height: 400px;
+}
+
+.closeBtn {
+    margin-top: 10px;
 }
 </style>
 </head>
 <body>
 
-<h1>Skin Directory</h1>
-
-<p style="text-align:center;">
+<h1>Skin Browser</h1>
+<p style="text-align:center">
 Click a skin name to copy the command.
 </p>
 
 <div id="skins">
-    <div class="loading">Loading skins...</div>
+Loading skins...
 </div>
 
 <div id="toast">Copied!</div>
 
-<script>
+<div id="previewModal">
+    <div id="previewBox">
+        <div id="previewTitle"></div>
+
+        <canvas id="skinCanvas"></canvas>
+
+        <br>
+
+        <button class="closeBtn" onclick="closePreview()">
+            Close
+        </button>
+    </div>
+</div>
+
+<script type="module">
+import * as skinview3d from "https://unpkg.com/skinview3d@3.2.0/bundles/skinview3d.bundle.js";
+
 const USER = "FloppyDisk-OSC";
 const REPO = "skins";
 
+let viewer;
+
+function showToast() {
+    const toast = document.getElementById("toast");
+
+    toast.style.opacity = "1";
+
+    setTimeout(() => {
+        toast.style.opacity = "0";
+    }, 1500);
+}
+
+async function copyCommand(fileName) {
+    const command =
+`/skin set web slim "https://floppydisk-osc.github.io/skins/${fileName}"`;
+
+    await navigator.clipboard.writeText(command);
+
+    showToast();
+}
+
+window.closePreview = () => {
+    document.getElementById("previewModal").style.display = "none";
+};
+
+window.previewSkin = async (fileName) => {
+
+    document.getElementById("previewTitle").textContent =
+        fileName.replace(".png","");
+
+    document.getElementById("previewModal").style.display = "flex";
+
+    const url =
+        `https://floppydisk-osc.github.io/skins/${fileName}`;
+
+    if (!viewer) {
+
+        viewer = new skinview3d.SkinViewer({
+            canvas: document.getElementById("skinCanvas"),
+            width: 300,
+            height: 400
+        });
+
+        viewer.controls.enableRotate = true;
+        viewer.animation =
+            new skinview3d.WalkingAnimation();
+    }
+
+    viewer.loadSkin(url);
+};
+
 async function loadSkins() {
-    try {
-        const response = await fetch(
-            `https://api.github.com/repos/${USER}/${REPO}/contents`
+
+    const response = await fetch(
+        `https://api.github.com/repos/${USER}/${REPO}/contents`
+    );
+
+    const files = await response.json();
+
+    const skins = files
+        .filter(file =>
+            file.name.toLowerCase().endsWith(".png")
+        )
+        .sort((a,b)=>
+            a.name.localeCompare(b.name)
         );
 
-        const files = await response.json();
+    const container =
+        document.getElementById("skins");
 
-        const skins = files
-            .filter(file => file.name.toLowerCase().endsWith(".png"))
-            .sort((a, b) => a.name.localeCompare(b.name));
+    container.innerHTML = "";
 
-        const container = document.getElementById("skins");
-        container.innerHTML = "";
+    for (const file of skins) {
 
-        skins.forEach(file => {
-            const skinName = file.name.replace(/\.png$/i, "");
+        const name =
+            file.name.replace(".png","");
 
-            const card = document.createElement("div");
-            card.className = "skin";
+        const div =
+            document.createElement("div");
 
-            card.innerHTML = `
-                <img src="${file.download_url}" alt="${skinName}">
-                <span class="skin-name">${skinName}</span>
-            `;
+        div.className = "skin";
 
-            card.querySelector(".skin-name").addEventListener("click", async () => {
-                const command =
-`/skin set web slim "https://floppydisk-osc.github.io/skins/${file.name}"`;
+        div.innerHTML = `
+            <img src="${file.download_url}">
+            <span class="skin-name">${name}</span>
+            <button>Preview</button>
+        `;
 
-                await navigator.clipboard.writeText(command);
+        div.querySelector(".skin-name")
+            .onclick = () =>
+                copyCommand(file.name);
 
-                const toast = document.getElementById("toast");
-                toast.style.opacity = "1";
+        div.querySelector("button")
+            .onclick = () =>
+                previewSkin(file.name);
 
-                setTimeout(() => {
-                    toast.style.opacity = "0";
-                }, 1500);
-            });
-
-            container.appendChild(card);
-        });
-    } catch (error) {
-        document.getElementById("skins").innerHTML =
-            "<p>Failed to load skins.</p>";
-        console.error(error);
+        container.appendChild(div);
     }
 }
 
